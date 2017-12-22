@@ -3,7 +3,6 @@
 namespace DTApi\Http\Controllers;
 
 use DTApi\Models\Job;
-use DTApi\Http\Requests;
 use DTApi\Models\Distance;
 use Illuminate\Http\Request;
 use DTApi\Repository\BookingRepository;
@@ -14,7 +13,6 @@ use DTApi\Repository\BookingRepository;
  */
 class BookingController extends Controller
 {
-
     /**
      * @var BookingRepository
      */
@@ -35,13 +33,22 @@ class BookingController extends Controller
      */
     public function index(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
-            $response = $this->repository->getUsersJobs($user_id);
-
+        //need to validate if input has user_id and the value exist on users table
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id'
+        ]);
+       
+        if($validator->fails()){
+            return response($validator->errors());
         }
-        elseif($request->__authenticatedUser->user_type == env('ADMIN_ROLE_ID') || $request->__authenticatedUser->user_type == env('SUPERADMIN_ROLE_ID'))
-        {
+        
+        //$request will contain user()
+        $user_id = $request->user()->id;
+        if ($user_id == $request->get('user_id')) {
+            $response = $this->repository->getUsersJobs($user_id);
+            //why need $request__authenticatedUser menthod ? 
+            //laravel already provide $request->user() to get authenticated user object
+        } elseif ($request->user()->user_type == env('ADMIN_ROLE_ID') || $request->user()->user_type == env('SUPERADMIN_ROLE_ID')) {
             $response = $this->repository->getAll($request);
         }
 
@@ -67,10 +74,9 @@ class BookingController extends Controller
     {
         $data = $request->all();
 
-        $response = $this->repository->store($request->__authenticatedUser, $data);
+        $response = $this->repository->store($request->user(), $data);
 
         return response($response);
-
     }
 
     /**
@@ -80,10 +86,9 @@ class BookingController extends Controller
      */
     public function update($id, Request $request)
     {
-        $data = $request->all();
-        $cuser = $request->__authenticatedUser;
-        $response = $this->repository->updateJob($id, array_except($data, ['_token', 'submit']), $cuser);
-
+        $cuser = $request->user();
+        //change array_exist() method call
+        $response = $this->repository->updateJob($id, $request->except(['_token', 'submit']), $cuser);
         return response($response);
     }
 
@@ -107,8 +112,7 @@ class BookingController extends Controller
      */
     public function getHistory(Request $request)
     {
-        if($user_id = $request->get('user_id')) {
-
+        if ($user_id = $request->get('user_id')) {
             $response = $this->repository->getUsersJobsHistory($user_id, $request);
             return response($response);
         }
@@ -123,7 +127,7 @@ class BookingController extends Controller
     public function acceptJob(Request $request)
     {
         $data = $request->all();
-        $user = $request->__authenticatedUser;
+        $user = $request->user();
 
         $response = $this->repository->acceptJob($data, $user);
 
@@ -133,7 +137,7 @@ class BookingController extends Controller
     public function acceptJobWithId(Request $request)
     {
         $data = $request->get('job_id');
-        $user = $request->__authenticatedUser;
+        $user = $request->user();
 
         $response = $this->repository->acceptJobWithId($data, $user);
 
@@ -147,7 +151,7 @@ class BookingController extends Controller
     public function cancelJob(Request $request)
     {
         $data = $request->all();
-        $user = $request->__authenticatedUser;
+        $user = $request->user();
 
         $response = $this->repository->cancelJobAjax($data, $user);
 
@@ -165,7 +169,6 @@ class BookingController extends Controller
         $response = $this->repository->endJob($data);
 
         return response($response);
-
     }
 
     public function customerNotCall(Request $request)
@@ -175,7 +178,6 @@ class BookingController extends Controller
         $response = $this->repository->customerNotCall($data);
 
         return response($response);
-
     }
 
     /**
@@ -185,7 +187,7 @@ class BookingController extends Controller
     public function getPotentialJobs(Request $request)
     {
         $data = $request->all();
-        $user = $request->__authenticatedUser;
+        $user = $request->user();
 
         $response = $this->repository->getPotentialJobs($user);
 
@@ -196,33 +198,35 @@ class BookingController extends Controller
     {
         $data = $request->all();
 
-        if (isset($data['distance']) && $data['distance'] != "") {
+        if (isset($data['distance']) && $data['distance'] != '') {
             $distance = $data['distance'];
         } else {
-            $distance = "";
+            $distance = '';
         }
-        if (isset($data['time']) && $data['time'] != "") {
+        if (isset($data['time']) && $data['time'] != '') {
             $time = $data['time'];
         } else {
-            $time = "";
+            $time = '';
         }
-        if (isset($data['jobid']) && $data['jobid'] != "") {
+        if (isset($data['jobid']) && $data['jobid'] != '') {
             $jobid = $data['jobid'];
         }
 
-        if (isset($data['session_time']) && $data['session_time'] != "") {
+        if (isset($data['session_time']) && $data['session_time'] != '') {
             $session = $data['session_time'];
         } else {
-            $session = "";
+            $session = '';
         }
 
         if ($data['flagged'] == 'true') {
-            if($data['admincomment'] == '') return "Please, add comment";
+            if ($data['admincomment'] == '') {
+                return 'Please, add comment';
+            }
             $flagged = 'yes';
         } else {
             $flagged = 'no';
         }
-        
+
         if ($data['manually_handled'] == 'true') {
             $manually_handled = 'yes';
         } else {
@@ -235,20 +239,20 @@ class BookingController extends Controller
             $by_admin = 'no';
         }
 
-        if (isset($data['admincomment']) && $data['admincomment'] != "") {
+        if (isset($data['admincomment']) && $data['admincomment'] != '') {
             $admincomment = $data['admincomment'];
         } else {
-            $admincomment = "";
+            $admincomment = '';
         }
+
+        
         if ($time || $distance) {
-
-            $affectedRows = Distance::where('job_id', '=', $jobid)->update(array('distance' => $distance, 'time' => $time));
+            $affectedRows = Distance::where('job_id', '=', $jobid)->update(['distance' => $distance, 'time' => $time]);
         }
 
+        // what are the conditions here ? if ($session, $flagged, $manually_handled, $by_admin) all 'no'? need to make sure what is the detail specs for this method 
         if ($admincomment || $session || $flagged || $manually_handled || $by_admin) {
-
-            $affectedRows1 = Job::where('id', '=', $jobid)->update(array('admin_comments' => $admincomment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin));
-
+            $affectedRows1 = Job::where('id', '=', $jobid)->update(['admin_comments' => $admincomment, 'flagged' => $flagged, 'session_time' => $session, 'manually_handled' => $manually_handled, 'by_admin' => $by_admin]);
         }
 
         return response('Record updated!');
@@ -279,8 +283,8 @@ class BookingController extends Controller
      */
     public function resendSMSNotifications(Request $request)
     {
-        $data = $request->all();
-        $job = $this->repository->find($data['jobid']);
+        //$data parameter not needed
+        $job = $this->repository->find($request->get('jobid'));
         $job_data = $this->repository->jobToData($job);
 
         try {
@@ -290,5 +294,4 @@ class BookingController extends Controller
             return response(['success' => $e->getMessage()]);
         }
     }
-
 }
